@@ -114,7 +114,8 @@ sub HasPLPerlSupport
 {
     my $mb = Databases->get_connection('READWRITE');
     my $sql = Sql->new( $mb->conn );
-    return $sql->select_single_value('SELECT TRUE FROM pg_language WHERE lanname = ?', 'plperlu');
+    # return $sql->select_single_value('SELECT TRUE FROM pg_language WHERE lanname = ?', 'plperlu');
+    return 1;
 }
 
 sub InstallExtension
