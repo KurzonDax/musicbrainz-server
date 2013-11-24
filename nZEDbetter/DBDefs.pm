@@ -137,7 +137,7 @@ sub REPLICATION_TYPE { RT_SLAVE }
 # Additionally you should set the environment variable
 # MUSICBRAINZ_USE_PROXY=1 when using a reverse proxy to make the server
 # aware of it when generating things like the canonical url in catalyst.
-sub WEB_SERVER                { "localhost:8080" }
+sub WEB_SERVER                { "localhost" }
 # sub LUCENE_SERVER             { "search.musicbrainz.org" }
 # sub WEB_SERVER_USED_IN_EMAIL  { my $self = shift; $self->WEB_SERVER }
 
@@ -205,11 +205,11 @@ sub WEB_SERVER                { "localhost:8080" }
 
 # MEMCACHED_SERVERS allows configuration of global memcached servers, if more
 # close configuration is not required
-# sub MEMCACHED_SERVERS { return ['127.0.0.1:11211']; };
+sub MEMCACHED_SERVERS { return ['127.0.0.1:11211']; };
 
 # MEMCACHED_NAMESPACE allows configuration of a global memcached namespace, if
 # more close configuration is not required
-# sub MEMCACHED_NAMESPACE { return 'MB:'; };
+sub MEMCACHED_NAMESPACE { return 'MB:'; };
 
 # PLUGIN_CACHE_OPTIONS are the options configured for Plugin::Cache.  $c->cache
 # is provided by Plugin::Cache, and is required for HTTP Digest authentication
@@ -409,7 +409,7 @@ sub WEB_SERVER                { "localhost:8080" }
 
 # sub USE_ETAGS { 1 }
 
-# sub CATALYST_DEBUG { 1 }
+sub CATALYST_DEBUG { 0 }
 
 # If you are developing on MusicBrainz, you should set this to a true value
 # This will turn off some optimizations (such as CSS/JS compression) to make
@@ -443,14 +443,14 @@ sub WEB_SERVER                { "localhost:8080" }
 # sub PROFILE_SITE { 0 }
 
 # If you want the FastCGI processes to restart, configure this
-# sub AUTO_RESTART {
-##    return {
-##        active => 1,
-##        check_each => 10,
-##        max_bits => 134217728,
-##        min_handled_requests => 100
-##    }
-# }
+sub AUTO_RESTART {
+    return {
+        active => 1,
+        check_each => 10,
+        max_bits => 134217728,
+        min_handled_requests => 100
+    }
+}
 
 # The maximum amount of time a process can be serving a single request
 # If undef, the process is never killed
