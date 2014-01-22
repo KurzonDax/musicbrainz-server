@@ -19,6 +19,7 @@ with 'MusicBrainz::Server::Controller::Role::Tag';
 with 'MusicBrainz::Server::Controller::Role::Subscribe';
 with 'MusicBrainz::Server::Controller::Role::Cleanup';
 with 'MusicBrainz::Server::Controller::Role::WikipediaExtract';
+with 'MusicBrainz::Server::Controller::Role::CommonsImage';
 
 use Data::Page;
 use HTTP::Status qw( :constants );
@@ -35,7 +36,8 @@ use MusicBrainz::Server::Constants qw(
     $EDIT_RELATIONSHIP_DELETE
     $ARTIST_ARTIST_COLLABORATION
 );
-use MusicBrainz::Server::ControllerUtils::Release qw( load_release_events );
+use MusicBrainz::Server::Form::Artist;
+use MusicBrainz::Server::Form::Confirm;
 use MusicBrainz::Server::Translation qw( l );
 use MusicBrainz::Server::FilterUtils qw(
     create_artist_release_groups_form
@@ -103,7 +105,6 @@ after 'load' => sub
     $c->model('ArtistType')->load($artist);
     $c->model('Gender')->load($artist);
     $c->model('Area')->load($artist);
-    $c->model('Area')->load_codes($artist->area);
     $c->model('Area')->load_containment($artist->area, $artist->begin_area, $artist->end_area);
 
     $c->stash(
@@ -139,6 +140,7 @@ sub show : PathPart('') Chained('load')
 
     my $artist = $c->stash->{artist};
     my $release_groups;
+    my $recordings;
     if ($c->stash->{artist}->id == $VARTIST_ID)
     {
         my $index = $c->req->query_params->{index};
@@ -161,26 +163,33 @@ sub show : PathPart('') Chained('load')
 
         my $method = 'find_by_artist';
         my $show_va = $c->req->query_params->{va};
+        my $show_all = $c->req->query_params->{all};
         if ($show_va) {
             $method = 'find_by_track_artist';
         }
 
         $release_groups = $self->_load_paged($c, sub {
-                $c->model('ReleaseGroup')->$method($c->stash->{artist}->id, shift, shift, filter => \%filter);
+                $c->model('ReleaseGroup')->$method($c->stash->{artist}->id, $show_all, shift, shift, filter => \%filter);
             });
 
-        my $pager = $c->stash->{pager};
-        if (!$show_va && !%filter && $pager->total_entries == 0) {
+        if (!$show_va && !%filter && scalar @$release_groups == 0) {
             $release_groups = $self->_load_paged($c, sub {
-                    $c->model('ReleaseGroup')->find_by_track_artist($c->stash->{artist}->id, shift, shift, filter => \%filter);
+                    $c->model('ReleaseGroup')->find_by_track_artist($c->stash->{artist}->id, $show_all, shift, shift, filter => \%filter);
                 });
             $c->stash(
                 va_only => 1
             );
         }
 
+        if (!$show_va && $c->stash->{va_only} && !%filter && scalar @$release_groups == 0) {
+            $recordings = $self->_load_paged($c, sub {
+                $c->model('Recording')->find_standalone($artist->id, shift, shift);
+            });
+        }
+
         $c->stash(
             show_va => $show_va,
+            show_all => $show_all,
             template => 'artist/index.tt'
         );
     }
@@ -192,6 +201,10 @@ sub show : PathPart('') Chained('load')
     $c->model('ArtistCredit')->load(@$release_groups);
     $c->model('ReleaseGroupType')->load(@$release_groups);
     $c->stash(
+        recordings => $recordings,
+        show_video => scalar (grep {
+            $_->video
+        } @$recordings),
         release_groups => $release_groups,
         show_artists => scalar grep {
             $_->artist_credit->name ne $artist->name
@@ -359,7 +372,7 @@ sub releases : Chained('load')
     $c->model('ArtistCredit')->load(@$releases);
     $c->model('Medium')->load_for_releases(@$releases);
     $c->model('MediumFormat')->load(map { $_->all_mediums } @$releases);
-    load_release_events($c, @$releases);
+    $c->model('Release')->load_release_events(@$releases);
     $c->model('ReleaseLabel')->load(@$releases);
     $c->model('Label')->load(map { $_->all_labels } @$releases);
     $c->stash(
@@ -389,6 +402,7 @@ is done via L<MusicBrainz::Server::Form::Artist>
 with 'MusicBrainz::Server::Controller::Role::Create' => {
     form      => 'Artist',
     edit_type => $EDIT_ARTIST_CREATE,
+    dialog_template => 'artist/edit_form.tt',
 };
 
 =head2 edit
@@ -474,15 +488,16 @@ with 'MusicBrainz::Server::Controller::Role::Merge' => {
 };
 
 around _validate_merge => sub {
-    my ($orig, $self, $c, $form, $merger) = @_;
-    return unless $self->$orig($c, $form, $merger);
+    my ($orig, $self, $c, $form) = @_;
+    return unless $self->$orig($c, $form);
     my $target = $form->field('target')->value;
-    if (grep { is_special_artist($_) && $target != $_ } $merger->all_entities) {
+    my @all = map { $_->value } $form->field('merging')->fields;
+    if (grep { is_special_artist($_) && $target != $_ } @all) {
         $form->field('target')->add_error(l('You cannot merge a special purpose artist into another artist'));
         return 0;
     }
 
-    if (any { $_ == $DARTIST_ID } $merger->all_entities) {
+    if (any { $_ == $DARTIST_ID } @all) {
         $form->field('target')->add_error(l('You cannot merge into Deleted Artist'));
         return 0;
     }

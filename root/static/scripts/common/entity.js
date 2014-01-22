@@ -61,10 +61,13 @@
     MB.entity.CoreEntity = aclass(Entity, {
 
         template: _.template(
-            "<a href=\"/<%= data.type %>/<%- data.gid %>\" target=\"_blank\"" +
+            "<% if (data.editsPending) { %><span class=\"mp\"><% } %>" +
+            "<a href=\"/<%= data.type %>/<%- data.gid %>\"" +
+            "<% if (data.target) { %> target=\"_blank\"<% } %>" +
             "<% if (data.sortname) { %> title=\"<%- data.sortname %>\"" +
             "<% } %>><%- data.name %></a><% if (data.comment) { %> " +
-            "<span class=\"comment\">(<%- data.comment %>)</span><% } %>",
+            "<span class=\"comment\">(<%- data.comment %>)</span><% } %>" +
+            "<% if (data.editsPending) { %></span><% } %>",
             null,
             {variable: "data"}
         ),
@@ -73,6 +76,7 @@
             this.id = data.id;
             this.gid = data.gid;
             this.name = data.name || "";
+            this.editsPending = data.editsPending;
 
             if (data.sortname) {
                 this.sortname = data.sortname;
@@ -88,8 +92,8 @@
             }
         },
 
-        html: function () {
-            return this.template(this);
+        html: function (renderParams) {
+            return this.template(_.extend(renderParams || {}, this));
         }
     });
 
@@ -138,8 +142,6 @@
             this.number = data.number;
             this.position = data.position;
             this.length = MB.utility.formatTrackLength(data.length);
-            this.artistCredit = new MB.entity.ArtistCredit(data.artistCredit);
-            this.editsPending = data.editsPending;
             this.gid = data.gid;
 
             if (data.recording) {
@@ -147,19 +149,25 @@
             }
         },
 
-        around$html: function (supr) {
+        around$html: function (supr, renderParams) {
             var recording = this.recording;
 
             if (!recording) {
-                return supr();
+                return supr(renderParams);
             }
 
-            return this.template({
-                type: "recording",
-                gid: recording.gid,
-                name: this.name,
-                comment: recording.comment
-            });
+            return this.template(
+                _.extend(
+                    renderParams || {},
+                    {
+                        type: "recording",
+                        gid: recording.gid,
+                        name: this.name,
+                        comment: recording.comment,
+                        editsPending: recording.editsPending
+                    }
+                )
+            );
         }
     });
 
@@ -179,8 +187,12 @@
     MB.entity.ArtistCreditName = aclass(Entity, {
 
         template: _.template(
-            "<a href=\"/artist/<%- data.gid %>\" target=\"_blank\" title=\"" +
-            "<%- data.title %>\"><%- data.name %></a><%- data.join %>",
+            "<% if (data.nameVariation) print('<span class=\"name-variation\">'); %>" +
+            "<a href=\"/artist/<%- data.gid %>\"" +
+            "<% if (data.target) print(' target=\"_blank\"'); %>" +
+            " title=\"<%- data.title %>\"><%- data.name %></a>" +
+            "<% if (data.nameVariation) print('</span>'); %>" +
+            "<%- data.join %>",
             null,
             {variable: "data"}
         ),
@@ -220,30 +232,34 @@
             return ko.unwrap(this.name) + ko.unwrap(this.joinPhrase);
         },
 
-        html: function () {
+        html: function (renderParams) {
             if (!this.hasArtist()) {
                 return _.escape(this.text());
             }
 
+            var name = ko.unwrap(this.name);
             var artist = ko.unwrap(this.artist);
             var title = artist.sortname;
 
             if (artist.comment) {
-                title += ", " + artist.comment;
+                title += " (" + artist.comment + ")";
             }
 
-            return this.template({
-                gid:   artist.gid,
-                title: title,
-                name:  ko.unwrap(this.name),
-                join:  ko.unwrap(this.joinPhrase)
-            });
+            return this.template(
+                _.extend(
+                    renderParams || {},
+                    {
+                        gid:   artist.gid,
+                        title: title,
+                        name:  name,
+                        join:  ko.unwrap(this.joinPhrase),
+                        nameVariation: name !== artist.name
+                    }
+                )
+            );
         },
 
         toJS: function () {
-            if (this.isEmpty()) {
-                return null;
-            }
             var artist = ko.unwrap(this.artist) || {};
 
             return {
@@ -297,23 +313,23 @@
             }, "");
         },
 
-        html: function () {
+        html: function (renderParams) {
             var names = ko.unwrap(this.names);
 
             return _.reduce(names, function (memo, name) {
-                return memo + name.html();
+                return memo + name.html(renderParams);
             }, "");
         },
 
         toJS: function () {
-            return _.compact(_.invoke(ko.unwrap(this.names), "toJS"));
+            return _.invoke(ko.unwrap(this.names), "toJS");
         }
     });
 
 
     MB.entity.Medium = aclass(Entity, function (data) {
         this.format = data.format;
-
+        this.name = data.name;
         this.position = data.position;
 
         this.tracks = _.map(data.tracks, function (obj) {

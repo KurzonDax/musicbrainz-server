@@ -126,10 +126,6 @@ $.widget("ui.autocomplete", $.ui.autocomplete, {
         });
 
         this.element.on("blur", function (event) {
-            if (self.cancelAllBlurs) {
-                self.cancelAllBlurs = false;
-                return;
-            }
             // Stop searching if someone types something and then tabs out of
             // the field.
             self.cancelSearch = true;
@@ -183,8 +179,6 @@ $.widget("ui.autocomplete", $.ui.autocomplete, {
     },
 
     _searchAgain: function (toggle) {
-        this._preventMenuClose();
-
         if (toggle) {
             this.indexedSearch = !this.indexedSearch;
         }
@@ -194,17 +188,8 @@ $.widget("ui.autocomplete", $.ui.autocomplete, {
     },
 
     _showMore: function () {
-        this._preventMenuClose();
         this.currentPage += 1;
         this._search(this._value());
-    },
-
-    _preventMenuClose: function () {
-        // cancelBlur prevents the menu from closing after a click event
-        this.cancelBlur = true;
-
-        // $.ui deletes cancelBlur after checking it, so we also need our own
-        this.cancelAllBlurs = true;
     },
 
     setSelection: function (data) {
@@ -270,7 +255,6 @@ $.widget("ui.autocomplete", $.ui.autocomplete, {
         var self = this;
 
         this.close();
-        this.element.prop("disabled", true);
 
         if (this.xhr) {
             this.xhr.abort();
@@ -292,14 +276,10 @@ $.widget("ui.autocomplete", $.ui.autocomplete, {
                         return;
                     }
                 }
-                self.currentSelection(data);
+                self.options.select(null, { item: data });
             },
 
-            error: _.bind(this.clear, this),
-
-            complete: function () {
-                self.element.prop("disabled", false).focus();
-            }
+            error: _.bind(this.clear, this)
         });
     },
 
@@ -307,6 +287,7 @@ $.widget("ui.autocomplete", $.ui.autocomplete, {
     resultHook: _.identity,
 
     _lookupSuccess: function (response, data, result, request) {
+        var self = this;
         var pager = _.last(data);
         var jumpTo = this.currentResults.length;
 
@@ -346,6 +327,24 @@ $.widget("ui.autocomplete", $.ui.autocomplete, {
             action: _.bind(this._searchAgain, this, true)
         });
 
+        var allowCreation = window === window.top,
+            entity = this.entity.replace("-", "_");
+
+        if (allowCreation && MB.text.AddANewEntity[entity]) {
+            results.push({
+                label: MB.text.AddANewEntity[entity],
+                action: function () {
+                    $("<div>").appendTo("body").createEntityDialog({
+                        name: self._value(),
+                        entity: entity,
+                        callback: function (item) {
+                            self.options.select(null, { item: item });
+                        }
+                    });
+                }
+            });
+        }
+
         response(results);
 
         this._delay(function () {
@@ -371,8 +370,7 @@ $.widget("ui.autocomplete", $.ui.autocomplete, {
         return $("<li>")
             .css("text-align", "center")
             .append($("<a>").text(item.label))
-            .appendTo(ul)
-            .data("ui-autocomplete-item", { action: item.action });
+            .appendTo(ul);
     },
 
     _renderItem: function (ul, item) {
@@ -400,21 +398,32 @@ $.widget("ui.menu", $.ui.menu, {
     // item. If it is, the action is executed. Otherwise we fall back to the
     // default menu behavior.
 
-    select: function (event) {
+    _selectAction: function (event) {
         var active = this.active || $(event.target).closest(".ui-menu-item");
         var item = active.data("ui-autocomplete-item");
 
         if (item && $.isFunction(item.action)) {
             item.action();
+
+            // If this is a click event on the <a>, make sure the event
+            // doesn't reach the parent <li>, or the select action will
+            // close the menu.
+            event.stopPropagation();
             event.preventDefault();
-        } else {
+
+            return true;
+        }
+    },
+
+    _create: function () {
+        this._super();
+        this._on({ "click .ui-menu-item > a": this._selectAction });
+    },
+
+    select: function (event) {
+        if (!this._selectAction(event)) {
             this._super(event);
         }
-
-        // When mouseHandled is true, $.ui ignores future mouse events. It only
-        // gets reset to false if you click outside of the menu, but we want
-        // it to be false no matter what.
-        this.mouseHandled = false;
     }
 });
 
@@ -443,7 +452,7 @@ MB.Control.autocomplete_formatters = {
         if (comment.length)
         {
             a.append (' <span class="autocomplete-comment">(' +
-                      MB.utility.escapeHTML (comment.join (", ")) + ')</span>');
+                      _.escapeHTML (comment.join (", ")) + ')</span>');
         }
 
         return $("<li>").append (a).appendTo (ul);
@@ -460,7 +469,7 @@ MB.Control.autocomplete_formatters = {
         if (item.comment)
         {
             a.append ('<span class="autocomplete-comment">(' +
-                      MB.utility.escapeHTML (item.comment) + ')</span>');
+                      _.escapeHTML (item.comment) + ')</span>');
         }
 
         if (item.video)
@@ -469,7 +478,7 @@ MB.Control.autocomplete_formatters = {
         }
 
         a.append ('<br /><span class="autocomplete-comment">by ' +
-                  MB.utility.escapeHTML (item.artist) + '</span>');
+                  _.escapeHTML (item.artist) + '</span>');
 
         if (item.appears_on && item.appears_on.hits > 0)
         {
@@ -484,7 +493,7 @@ MB.Control.autocomplete_formatters = {
             }
 
             a.append ('<br /><span class="autocomplete-appears">appears on: ' +
-                      MB.utility.escapeHTML (rgs.join (", ")) + '</span>');
+                      _.escapeHTML (rgs.join (", ")) + '</span>');
         }
         else {
             a.append ('<br /><span class="autocomplete-appears">standalone recording</span>');
@@ -493,7 +502,7 @@ MB.Control.autocomplete_formatters = {
         if (item.isrcs.length)
         {
             a.append ('<br /><span class="autocomplete-isrcs">isrcs: ' +
-                      MB.utility.escapeHTML (item.isrcs.join (", ")) + '</span>');
+                      _.escapeHTML (item.isrcs.join (", ")) + '</span>');
         }
 
         return $("<li>").append (a).appendTo (ul);
@@ -511,12 +520,12 @@ MB.Control.autocomplete_formatters = {
         if (item.comment)
         {
             a.append ('<span class="autocomplete-comment">(' +
-                      MB.utility.escapeHTML (item.comment) + ')</span>');
+                      _.escapeHTML (item.comment) + ')</span>');
         }
 
         if (item.typeName) {
             a.append ('<br /><span class="autocomplete-comment">' + item.typeName + ' by ' +
-                    MB.utility.escapeHTML (item.artist) + '</span>');
+                    _.escapeHTML (item.artist) + '</span>');
         }
 
         return $("<li>").append (a).appendTo (ul);
@@ -544,7 +553,7 @@ MB.Control.autocomplete_formatters = {
         if (comment.length)
         {
             a.append (' <span class="autocomplete-comment">(' +
-                      MB.utility.escapeHTML (comment.join (", ")) + ')</span>');
+                      _.escapeHTML (comment.join (", ")) + ')</span>');
         }
 
         var artistRenderer = function(prefix, artists) {
@@ -558,7 +567,7 @@ MB.Control.autocomplete_formatters = {
 
                 a.append ('<br /><span class="autocomplete-comment">' +
                         prefix + ': ' +
-                        MB.utility.escapeHTML (toRender.join (", ")) + '</span>');
+                        _.escapeHTML (toRender.join (", ")) + '</span>');
             }
         };
 
@@ -574,15 +583,15 @@ MB.Control.autocomplete_formatters = {
         if (item.comment)
         {
             a.append ('<span class="autocomplete-comment">(' +
-                      MB.utility.escapeHTML (item.comment) + ')</span>');
+                      _.escapeHTML (item.comment) + ')</span>');
         }
 
         if (item.typeName || item.parentCountry || item.parentSubdivision || item.parentCity) {
              var items = [];
-             if (item.typeName) items.push(MB.utility.escapeHTML(item.typeName));
-             if (item.parentCity) items.push(MB.utility.escapeHTML(item.parentCity));
-             if (item.parentSubdivision) items.push(MB.utility.escapeHTML(item.parentSubdivision));
-             if (item.parentCountry) items.push(MB.utility.escapeHTML(item.parentCountry));
+             if (item.typeName) items.push(_.escapeHTML(item.typeName));
+             if (item.parentCity) items.push(_.escapeHTML(item.parentCity));
+             if (item.parentSubdivision) items.push(_.escapeHTML(item.parentSubdivision));
+             if (item.parentCountry) items.push(_.escapeHTML(item.parentCountry));
              a.append ('<br /><span class="autocomplete-comment">' +
                        items.join(", ") +
                        '</span>');
@@ -609,14 +618,14 @@ MB.Control.autocomplete_formatters = {
         if (comment.length)
         {
             a.append (' <span class="autocomplete-comment">(' +
-                      MB.utility.escapeHTML (comment.join (", ")) + ')</span>');
+                      _.escapeHTML (comment.join (", ")) + ')</span>');
         }
 
         if (item.typeName || item.area) {
              a.append ('<br /><span class="autocomplete-comment">' +
-                       (item.typeName ? MB.utility.escapeHTML(item.typeName) : '') +
+                       (item.typeName ? _.escapeHTML(item.typeName) : '') +
                        (item.typeName && item.area ? ', ' : '') +
-                       (item.area ? MB.utility.escapeHTML(item.area) : '') +
+                       (item.area ? _.escapeHTML(item.area) : '') +
                        '</span>');
         };
 

@@ -108,7 +108,7 @@ END; -%]
 [% END %]
 
 [%- MACRO display_artwork(artwork, fallback, message, rel) BLOCK -%]
-    <a title="[% artwork_hover(artwork) %]" href="[% artwork.image %]"[% IF rel %] rel="[% rel %]"[% END %] class="thickbox">
+    <a title="[% artwork_hover(artwork) %]" href="[% artwork.image %]"[% IF rel %] rel="[% rel %]"[% END %] class="artwork-image">
       [% display_artwork_image(artwork, fallback, message) %]
     </a>
 [%- END -%]
@@ -257,7 +257,7 @@ END -%]
     ELSE;
       link_deleted(entity, text);
     END;
-    disambiguation(entity) UNLESS text;
+    disambiguation(entity) IF text == '';
 END -%]
 
 [%- MACRO link_deleted(entity, text) BLOCK;
@@ -872,7 +872,7 @@ http://[%- server -%]/[%- id -%]
   [%- IF server_details.developement_server -%]
     [%- USE date -%]
     [%- FOR file IN c.model('FileCache').manifest_files(manifest, 'js'); -%]
-        <script type="text/javascript" src="[% c.uri_for("/static/") %][%- file -%]?t=[% date.now %]"></script>
+        <script type="text/javascript" src="[% c.uri_for("/static/") %][%- file -%]"></script>
     [%- END -%]
   [%- ELSE -%]
     <script src="[% c.uri_for("/static/") %][% c.model('FileCache').manifest_signature(manifest, 'js') %].js"></script>
@@ -961,6 +961,21 @@ http://[%- server -%]/[%- id -%]
             $.get('[% wikipedia_extract_url %]',
                   function (data) {
                       $('#wikipedia-insertion-point').replaceWith(data);
+                  },
+                  'html');
+        //]]></script>
+    [%- END -%]
+[%- END -%]
+
+[%- MACRO show_image BLOCK -%]
+    [%- IF image -%]
+        [%- INCLUDE 'components/commons-image.tt' -%]
+    [%- ELSIF image_url -%]
+        <span style="display:none" id="image-insertion-point"></span>
+        <script type="text/javascript">//<![CDATA[
+            $.get('[% image_url %]',
+                  function (data) {
+                      $('#image-insertion-point').replaceWith(data);
                   },
                   'html');
         //]]></script>

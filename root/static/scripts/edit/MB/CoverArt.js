@@ -55,8 +55,9 @@ MB.CoverArt.image_error = function ($img, image) {
     }
 };
 
-MB.CoverArt.reorder_button = function(direction, $editimage, after) {
+MB.CoverArt.reorder_button = function(direction, $editimage_param, after) {
     return function (event) {
+        var $editimage = $editimage_param;
         if (!$editimage) {
             $editimage = $(this).closest('div.editimage');
         }
@@ -196,8 +197,13 @@ MB.CoverArt.file_data_uri = function (file) {
 MB.CoverArt.sign_upload = function (file, gid, mime_type) {
     var deferred = $.Deferred ();
 
-    var postfields = $.getJSON('/ws/js/cover-art-upload/' + gid,
-                               { mime_type: mime_type });
+    var postfields = $.ajax({
+        url: "/ws/js/cover-art-upload/" + gid,
+        data: { mime_type: mime_type },
+        dataType: "json",
+        cache: false
+    });
+
     postfields.fail (function (jqxhr, status, error) {
         deferred.reject ("error obtaining signature: " + status + " " + error);
     });
@@ -476,7 +482,7 @@ MB.CoverArt.add_cover_art = function (gid) {
 
     File.prototype.slice = File.prototype.webkitSlice || File.prototype.mozSlice || File.prototype.slice;
 
-    if (typeof (FormData) === "function")
+    if (typeof (FormData) !== "undefined" && typeof (FileReader) !== 'undefined')
     {
         /* FormData is supported, so we can present the multifile ajax
          * upload form. */
@@ -516,7 +522,7 @@ MB.CoverArt.add_cover_art = function (gid) {
         $('#drop-zone').on ('dragover', function (event) {
             event.preventDefault();
             event.stopPropagation();
-            event.dataTransfer.dropEffect = 'copy';
+            event.originalEvent.dataTransfer.dropEffect = 'copy';
         });
 
         $('#drop-zone').on ('drop', function (event) {
